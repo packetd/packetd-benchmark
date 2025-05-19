@@ -1,0 +1,26 @@
+# IDE
+*.DS_Store
+.idea/
+.vscode/
+build.yml
+dist/
+
+go.work
+go.work.sum
+
+*_tmp
+.idea
+.vscode
+
+packetd
+./dev.sh
+
+# benchmark binary
+http/client/client
+http/server/server
+mysql/client/client
+redis/client/client
+grpc/client/client
+grpc/server/server
+mangodb/client/client
+postgresql/client/client
