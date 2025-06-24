@@ -20,10 +20,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/packetd/packetd-benchmark/common"
 )
 
@@ -33,7 +35,7 @@ type Config struct {
 	Total    int
 	BodySize string
 	Status   string
-	Duration time.Duration
+	Interval time.Duration
 }
 
 func (c Config) GetBodySize() int {
@@ -52,9 +54,8 @@ type Client struct {
 func New(conf Config) *Client {
 	cli := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConns:        50,
 			MaxIdleConnsPerHost: 50,
-			IdleConnTimeout:     2 * time.Minute,
+			IdleConnTimeout:     time.Minute,
 		},
 	}
 	return &Client{
@@ -70,9 +71,9 @@ func (c *Client) Run() {
 
 	go func() {
 		for i := 0; i < c.conf.Total; i++ {
-			u := fmt.Sprintf("http://%s/benchmark?duration=%s&size=%d&status=%s",
+			u := fmt.Sprintf("http://%s/benchmark?duration=%v&size=%v&status=%v",
 				c.conf.Addr,
-				c.conf.Duration.String(),
+				c.conf.Interval.String(),
 				c.conf.BodySize,
 				statusList[i%len(statusList)],
 			)
@@ -108,22 +109,35 @@ func (c *Client) Run() {
 	wg.Wait()
 
 	elapsed := time.Since(start)
-	log.Printf("Total %d requests take %s, qps=%f, bps=%s\n",
-		c.conf.Total,
-		elapsed,
-		float64(c.conf.Total)/elapsed.Seconds(),
+	printTable(
+		"HTTP",
+		fmt.Sprintf("%d", c.conf.Total),
+		fmt.Sprintf("%d", c.conf.Workers),
+		c.conf.BodySize,
+		c.conf.Interval.String(),
+		elapsed.String(),
+		fmt.Sprintf("%f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
 	)
 }
 
+func printTable(columns ...string) {
+	header := []string{"Proto", "Request", "Workers", "BodySize", "Interval", "Elapsed", "QPS", "bps"}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(header)
+	table.Bulk([][]string{columns})
+	table.Render()
+}
+
 func main() {
 	var c Config
+	flag.StringVar(&c.Addr, "addr", "localhost:8083", "http server address")
 	flag.IntVar(&c.Workers, "workers", 1, "concurrency workers")
 	flag.IntVar(&c.Total, "total", 1, "requests total")
 	flag.StringVar(&c.BodySize, "body_size", "1KB", "request body size")
-	flag.DurationVar(&c.Duration, "duation", time.Second, "duration per request")
+	flag.DurationVar(&c.Interval, "interval", time.Second, "interval per request")
 	flag.StringVar(&c.Status, "status", "200", "http response status")
-	flag.StringVar(&c.Addr, "addr", "localhost:8083", "http server address")
 	flag.Parse()
 
 	client := New(c)

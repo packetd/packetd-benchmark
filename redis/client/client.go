@@ -17,10 +17,13 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/packetd/packetd-benchmark/common"
@@ -86,6 +89,9 @@ func (c *Client) Run() {
 		go func() {
 			defer wg.Done()
 			for range ch {
+				if c.conf.Interval > 0 {
+					time.Sleep(c.conf.Interval)
+				}
 				var err error
 				switch c.conf.Cmd {
 				case "ping":
@@ -104,11 +110,16 @@ func (c *Client) Run() {
 	wg.Wait()
 
 	elapsed := time.Since(start)
-	log.Printf("Total %d requests take %s, qps=%f, bps=%s\n",
-		c.conf.Total,
-		elapsed,
-		float64(c.conf.Total)/elapsed.Seconds(),
-		common.HumanizeBit(float64(c.conf.Total)*float64(c.conf.GetBodySize())/elapsed.Seconds()),
+	printTable(
+		"Redis",
+		fmt.Sprintf("%d", c.conf.Total),
+		fmt.Sprintf("%d", c.conf.Workers),
+		c.conf.BodySize,
+		c.conf.Cmd,
+		c.conf.Interval.String(),
+		elapsed.String(),
+		fmt.Sprintf("%f", float64(c.conf.Total)/elapsed.Seconds()),
+		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
 	)
 }
 
@@ -122,6 +133,15 @@ func (c *Client) cmdSet() error {
 
 func (c *Client) cmdGet() error {
 	return c.cli.Get(context.Background(), "hello").Err()
+}
+
+func printTable(columns ...string) {
+	header := []string{"Proto", "Request", "Workers", "BodySize", "Cmd", "Interval", "Elapsed", "QPS", "bps"}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.Header(header)
+	table.Bulk([][]string{columns})
+	table.Render()
 }
 
 func main() {

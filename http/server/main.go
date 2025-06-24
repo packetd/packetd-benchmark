@@ -31,7 +31,7 @@ func main() {
 		size, _ := strconv.Atoi(r.FormValue("size"))
 		status, _ := strconv.Atoi(r.FormValue("status"))
 
-		log.Printf("request from %s, duration=%s, size=%v, status=%d\n", r.RemoteAddr, duration, size, status)
+		log.Printf("request from %s, duration=%v, size=%v, status=%v\n", r.RemoteAddr, duration, size, status)
 		if duration > 0 {
 			time.Sleep(duration)
 		}

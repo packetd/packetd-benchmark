@@ -12,9 +12,6 @@ go.work.sum
 .idea
 .vscode
 
-packetd
-./dev.sh
-
 # benchmark binary
 http/client/client
 http/server/server
@@ -24,3 +21,5 @@ grpc/client/client
 grpc/server/server
 mangodb/client/client
 postgresql/client/client
+
+dev.sh
