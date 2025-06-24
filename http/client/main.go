@@ -118,16 +118,37 @@ func (c *Client) Run() {
 		elapsed.String(),
 		fmt.Sprintf("%f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
+		requestProtocolMetrics("http_requests_total"),
 	)
 }
 
 func printTable(columns ...string) {
-	header := []string{"Proto", "Request", "Workers", "BodySize", "Interval", "Elapsed", "QPS", "bps"}
+	header := []string{"Proto", "Request", "Workers", "BodySize", "Interval", "Elapsed", "QPS", "bps", "Proto/Metrics"}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.Header(header)
 	table.Bulk([][]string{columns})
 	table.Render()
+}
+
+func requestProtocolMetrics(prefix string) string {
+	rsp, err := http.Get("http://localhost:9091/protocol/metrics")
+	if err != nil {
+		return ""
+	}
+	defer rsp.Body.Close()
+
+	b, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.Split(line, " ")[1]
+		}
+	}
+	return ""
 }
 
 func main() {
