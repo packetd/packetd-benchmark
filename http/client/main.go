@@ -25,7 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/jedib0t/go-pretty/v6/table"
+	//"github.com/olekukonko/tablewriter"
 	"github.com/packetd/packetd-benchmark/common"
 )
 
@@ -77,7 +78,10 @@ func (c *Client) Run() {
 				c.conf.BodySize,
 				statusList[i%len(statusList)],
 			)
-			log.Printf("[%d/%d] %s\n", i+1, c.conf.Total, u)
+
+			if (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
+				log.Printf("[%d/%d] %s\n", i+1, c.conf.Total, u)
+			}
 			urls <- u
 		}
 		close(urls)
@@ -108,47 +112,43 @@ func (c *Client) Run() {
 	}
 	wg.Wait()
 
+	time.Sleep(time.Second)
+	reqTotal, _ := common.RequestProtocolMetrics("http_requests_total")
 	elapsed := time.Since(start)
 	printTable(
 		"HTTP",
-		fmt.Sprintf("%d", c.conf.Total),
-		fmt.Sprintf("%d", c.conf.Workers),
+		c.conf.Total,
+		c.conf.Workers,
 		c.conf.BodySize,
 		c.conf.Interval.String(),
 		elapsed.String(),
-		fmt.Sprintf("%f", float64(c.conf.Total)/elapsed.Seconds()),
+		fmt.Sprintf("%.2f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
-		requestProtocolMetrics("http_requests_total"),
+		reqTotal,
+		fmt.Sprintf("%.2f%%", reqTotal/float64(c.conf.Total)*100),
 	)
+	common.RequestReset()
 }
 
-func printTable(columns ...string) {
-	header := []string{"Proto", "Request", "Workers", "BodySize", "Interval", "Elapsed", "QPS", "bps", "Proto/Metrics"}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.Header(header)
-	table.Bulk([][]string{columns})
-	table.Render()
-}
-
-func requestProtocolMetrics(prefix string) string {
-	rsp, err := http.Get("http://localhost:9091/protocol/metrics")
-	if err != nil {
-		return ""
+func printTable(columns ...interface{}) {
+	header := []interface{}{
+		"Proto",
+		"Request",
+		"Workers",
+		"BodySize",
+		"Interval",
+		"Elapsed",
+		"QPS",
+		"bps",
+		"Proto/Metrics",
+		"Proto/Percent",
 	}
-	defer rsp.Body.Close()
-
-	b, err := io.ReadAll(rsp.Body)
-	if err != nil {
-		return ""
-	}
-
-	for _, line := range strings.Split(string(b), "\n") {
-		if strings.HasPrefix(line, prefix) {
-			return strings.Split(line, " ")[1]
-		}
-	}
-	return ""
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(header)
+	t.AppendRow(columns)
+	t.AppendSeparator()
+	t.Render()
 }
 
 func main() {
