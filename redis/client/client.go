@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/packetd/packetd-benchmark/common"
@@ -33,7 +33,6 @@ type Config struct {
 	Addr     string
 	Workers  int
 	Total    int
-	PoolSize int
 	BodySize string
 	Cmd      string
 	Interval time.Duration
@@ -58,7 +57,7 @@ func New(conf Config) *Client {
 		DialTimeout:  time.Second,
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
-		PoolSize:     conf.PoolSize,
+		PoolSize:     conf.Workers,
 	})
 	return &Client{
 		conf: conf,
@@ -76,7 +75,10 @@ func (c *Client) Run() {
 		var counter int
 		for i := 0; i < c.conf.Total; i++ {
 			counter++
+
+			//if (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
 			log.Printf("[%d/%d] command %s, size=%s\n", counter, c.conf.Total, c.conf.Cmd, c.conf.BodySize)
+			//}
 			ch <- struct{}{}
 		}
 		close(ch)
@@ -110,17 +112,21 @@ func (c *Client) Run() {
 	wg.Wait()
 
 	elapsed := time.Since(start)
+	time.Sleep(time.Second)
+	reqTotal, _ := common.RequestProtocolMetrics("redis_requests_total")
 	printTable(
 		"Redis",
-		fmt.Sprintf("%d", c.conf.Total),
-		fmt.Sprintf("%d", c.conf.Workers),
-		c.conf.BodySize,
+		c.conf.Total,
+		c.conf.Workers,
 		c.conf.Cmd,
-		c.conf.Interval.String(),
-		elapsed.String(),
-		fmt.Sprintf("%f", float64(c.conf.Total)/elapsed.Seconds()),
+		c.conf.BodySize,
+		fmt.Sprintf("%.3fs", elapsed.Seconds()),
+		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
+		reqTotal,
+		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
 	)
+	common.RequestReset()
 }
 
 func (c *Client) cmdPing() error {
@@ -135,13 +141,25 @@ func (c *Client) cmdGet() error {
 	return c.cli.Get(context.Background(), "hello").Err()
 }
 
-func printTable(columns ...string) {
-	header := []string{"Proto", "Request", "Workers", "BodySize", "Cmd", "Interval", "Elapsed", "QPS", "bps"}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.Header(header)
-	table.Bulk([][]string{columns})
-	table.Render()
+func printTable(columns ...interface{}) {
+	header := []interface{}{
+		"Proto",
+		"Request",
+		"Workers",
+		"Command",
+		"BodySize",
+		"Elapsed",
+		"QPS",
+		"bps",
+		"Proto/Metrics",
+		"Proto/Percent",
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(header)
+	t.AppendRow(columns)
+	t.AppendSeparator()
+	t.Render()
 }
 
 func main() {
@@ -149,10 +167,9 @@ func main() {
 	flag.StringVar(&c.Addr, "addr", "localhost:6379", "redis server address")
 	flag.IntVar(&c.Workers, "workers", 1, "concurrency workers")
 	flag.IntVar(&c.Total, "total", 1, "requests total")
-	flag.IntVar(&c.PoolSize, "pool_size", 10, "connection pool size")
 	flag.StringVar(&c.BodySize, "body_size", "1KB", "request body size")
 	flag.StringVar(&c.Cmd, "cmd", "ping", "redis command, options: ping/set/get")
-	flag.DurationVar(&c.Interval, "interval", time.Second, "interval between requests")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval between requests")
 	flag.Parse()
 
 	client := New(c)

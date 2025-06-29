@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
-	//"github.com/olekukonko/tablewriter"
 	"github.com/packetd/packetd-benchmark/common"
 )
 
@@ -55,7 +54,7 @@ type Client struct {
 func New(conf Config) *Client {
 	cli := &http.Client{
 		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 50,
+			MaxIdleConnsPerHost: 1000,
 			IdleConnTimeout:     time.Minute,
 		},
 	}
@@ -120,12 +119,11 @@ func (c *Client) Run() {
 		c.conf.Total,
 		c.conf.Workers,
 		c.conf.BodySize,
-		c.conf.Interval.String(),
-		elapsed.String(),
-		fmt.Sprintf("%.2f", float64(c.conf.Total)/elapsed.Seconds()),
+		fmt.Sprintf("%.3fs", elapsed.Seconds()),
+		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
 		reqTotal,
-		fmt.Sprintf("%.2f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
 	)
 	common.RequestReset()
 }
@@ -136,7 +134,6 @@ func printTable(columns ...interface{}) {
 		"Request",
 		"Workers",
 		"BodySize",
-		"Interval",
 		"Elapsed",
 		"QPS",
 		"bps",
@@ -157,7 +154,7 @@ func main() {
 	flag.IntVar(&c.Workers, "workers", 1, "concurrency workers")
 	flag.IntVar(&c.Total, "total", 1, "requests total")
 	flag.StringVar(&c.BodySize, "body_size", "1KB", "request body size")
-	flag.DurationVar(&c.Interval, "interval", time.Second, "interval per request")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval per request")
 	flag.StringVar(&c.Status, "status", "200", "http response status")
 	flag.Parse()
 
