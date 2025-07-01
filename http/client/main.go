@@ -125,7 +125,7 @@ func (c *Client) Run() {
 		reqTotal,
 		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
 	)
-	common.RequestReset()
+	_ = common.RequestReset()
 }
 
 func printTable(columns ...interface{}) {

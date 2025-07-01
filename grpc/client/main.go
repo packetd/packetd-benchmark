@@ -16,10 +16,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"google.golang.org/grpc"
 
 	"github.com/packetd/packetd-benchmark/common"
@@ -31,7 +34,7 @@ type Config struct {
 	Workers  int
 	Total    int
 	BodySize string
-	Duration time.Duration
+	Interval time.Duration
 }
 
 func (c Config) GetBodySize() int {
@@ -44,6 +47,7 @@ func (c Config) GetBodySize() int {
 
 type Client struct {
 	conf Config
+	conn *grpc.ClientConn
 	cli  pb.BenchmarkClient
 }
 
@@ -52,16 +56,18 @@ func New(conf Config) *Client {
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
 
 	cli := pb.NewBenchmarkClient(conn)
 	return &Client{
 		conf: conf,
+		conn: conn,
 		cli:  cli,
 	}
 }
 
 func (c *Client) Run() {
+	defer c.conn.Close()
+
 	doRequest := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
@@ -93,21 +99,49 @@ func (c *Client) Run() {
 	}
 	wg.Wait()
 
+	time.Sleep(time.Second)
+	reqTotal, _ := common.RequestProtocolMetrics("grpc_requests_total")
 	elapsed := time.Since(start)
-	log.Printf("Total %d requests take %s, qps=%f, bps=%s\n",
+	printTable(
+		"Grpc",
 		c.conf.Total,
-		elapsed,
-		float64(c.conf.Total)/elapsed.Seconds(),
+		c.conf.Workers,
+		c.conf.BodySize,
+		fmt.Sprintf("%.3fs", elapsed.Seconds()),
+		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
+		reqTotal,
+		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
 	)
+	_ = common.RequestReset()
+}
+
+func printTable(columns ...interface{}) {
+	header := []interface{}{
+		"Proto",
+		"Request",
+		"Workers",
+		"BodySize",
+		"Elapsed",
+		"QPS",
+		"bps",
+		"Proto/Metrics",
+		"Proto/Percent",
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(header)
+	t.AppendRow(columns)
+	t.AppendSeparator()
+	t.Render()
 }
 
 func main() {
 	var c Config
 	flag.IntVar(&c.Workers, "workers", 1, "concurrency workers")
 	flag.IntVar(&c.Total, "total", 1, "requests total")
-	flag.StringVar(&c.BodySize, "size", "1KB", "request body size")
-	flag.DurationVar(&c.Duration, "duration", time.Second, "duration per request")
+	flag.StringVar(&c.BodySize, "body_size", "1KB", "request body size")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval per request")
 	flag.StringVar(&c.Addr, "addr", "localhost:8085", "grpc server address")
 	flag.Parse()
 
