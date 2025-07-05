@@ -75,10 +75,9 @@ func (c *Client) Run() {
 		var counter int
 		for i := 0; i < c.conf.Total; i++ {
 			counter++
-
-			//if (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
-			log.Printf("[%d/%d] command %s, size=%s\n", counter, c.conf.Total, c.conf.Cmd, c.conf.BodySize)
-			//}
+			if c.conf.Total <= 10 || (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
+				log.Printf("[%d/%d] command %s, size=%s\n", counter, c.conf.Total, c.conf.Cmd, c.conf.BodySize)
+			}
 			ch <- struct{}{}
 		}
 		close(ch)
