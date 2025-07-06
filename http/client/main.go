@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+
 	"github.com/packetd/packetd-benchmark/common"
 )
 
@@ -78,7 +79,7 @@ func (c *Client) Run() {
 				statusList[i%len(statusList)],
 			)
 
-			if (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
+			if common.ShouldLog(c.conf.Total, i) {
 				log.Printf("[%d/%d] %s\n", i+1, c.conf.Total, u)
 			}
 			urls <- u
@@ -97,6 +98,9 @@ func (c *Client) Run() {
 		return nil
 	}
 
+	rr := common.NewResourceRecorder()
+	rr.Start()
+
 	var wg sync.WaitGroup
 	for i := 0; i < c.conf.Workers; i++ {
 		wg.Add(1)
@@ -111,9 +115,16 @@ func (c *Client) Run() {
 	}
 	wg.Wait()
 
-	time.Sleep(time.Second)
-	reqTotal, _ := common.RequestProtocolMetrics("http_requests_total")
 	elapsed := time.Since(start)
+	resource := rr.End()
+
+	time.Sleep(time.Second)
+	metrics, err := common.RequestProtocolMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqTotal := metrics["http_requests_total"]
 	printTable(
 		"HTTP",
 		c.conf.Total,
@@ -122,23 +133,26 @@ func (c *Client) Run() {
 		fmt.Sprintf("%.3fs", elapsed.Seconds()),
 		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
-		reqTotal,
+		int(reqTotal),
 		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f", resource.CPU),
+		fmt.Sprintf("%.3f", resource.Mem/1024/1024),
 	)
-	_ = common.RequestReset()
 }
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"Proto",
-		"Request",
-		"Workers",
-		"BodySize",
-		"Elapsed",
-		"QPS",
+		"proto",
+		"request",
+		"workers",
+		"bodySize",
+		"elapsed",
+		"qps",
 		"bps",
-		"Proto/Metrics",
-		"Proto/Percent",
+		"proto/request",
+		"proto/percent",
+		"cpu (core)",
+		"memory (MB)",
 	}
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)

@@ -14,42 +14,88 @@
 package common
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
-func RequestProtocolMetrics(prefix string) (float64, error) {
-	rsp, err := http.Get("http://localhost:9091/protocol/metrics")
+func RequestProtocolMetrics() (map[string]float64, error) {
+	return doRequest("http://localhost:9091/protocol/metrics")
+}
+
+func RequestMetrics() (map[string]float64, error) {
+	return doRequest("http://localhost:9091/metrics")
+}
+
+func doRequest(url string) (map[string]float64, error) {
+	rsp, err := http.Get(url)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer rsp.Body.Close()
 
 	b, err := io.ReadAll(rsp.Body)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	for _, line := range strings.Split(string(b), "\n") {
-		if !strings.HasPrefix(line, prefix) {
+	metrics := make(map[string]float64)
+	lines := strings.Split(string(b), "\n")
+	for _, line := range lines {
+		if len(line) == 0 || strings.HasPrefix(line, "#") {
 			continue
 		}
 
-		val := strings.Split(line, " ")[1]
-		return strconv.ParseFloat(val, 64)
+		parts := strings.Split(line, " ")
+		f, err := strconv.ParseFloat(parts[1], 64)
+		if err != nil {
+			continue
+		}
+
+		name := strings.Split(parts[0], "{")[0]
+		metrics[name] = f
 	}
-	return 0, nil
+	return metrics, nil
 }
 
-func RequestReset() error {
-	rsp, err := http.Post("http://localhost:9091/-/reset", "", &bytes.Buffer{})
-	if err != nil {
-		return err
-	}
-	defer rsp.Body.Close()
+type Resource struct {
+	CPU float64
+	Mem float64
+}
 
-	return nil
+type ResourceRecorder struct {
+	t     time.Time
+	start Resource
+}
+
+func NewResourceRecorder() *ResourceRecorder {
+	return &ResourceRecorder{}
+}
+
+func (r *ResourceRecorder) Start() {
+	r.t = time.Now()
+	metrics, err := RequestMetrics()
+	if err != nil {
+		return
+	}
+
+	r.start = Resource{
+		CPU: metrics["process_cpu_seconds_total"],
+	}
+}
+
+func (r *ResourceRecorder) End() Resource {
+	var resource Resource
+	metrics, err := RequestMetrics()
+	if err != nil {
+		return resource
+	}
+
+	cpu := (metrics["process_cpu_seconds_total"] - r.start.CPU) / (time.Now().Sub(r.t).Seconds())
+	return Resource{
+		CPU: cpu,
+		Mem: metrics["process_resident_memory_bytes"],
+	}
 }

@@ -72,3 +72,7 @@ func ParseBytes(s string) (int, error) {
 		return 0, errors.New("unknown unit")
 	}
 }
+
+func ShouldLog(total, idx int) bool {
+	return total <= 10 || (idx+1)%(total/10) == 0 || idx == total-1
+}

@@ -75,13 +75,16 @@ func (c *Client) Run() {
 		var counter int
 		for i := 0; i < c.conf.Total; i++ {
 			counter++
-			if c.conf.Total <= 10 || (i+1)%(c.conf.Total/10) == 0 || i == c.conf.Total-1 {
+			if common.ShouldLog(c.conf.Total, i) {
 				log.Printf("[%d/%d] command %s, size=%s\n", counter, c.conf.Total, c.conf.Cmd, c.conf.BodySize)
 			}
 			ch <- struct{}{}
 		}
 		close(ch)
 	}()
+
+	rr := common.NewResourceRecorder()
+	rr.Start()
 
 	start := time.Now()
 	wg := sync.WaitGroup{}
@@ -111,21 +114,29 @@ func (c *Client) Run() {
 	wg.Wait()
 
 	elapsed := time.Since(start)
+	resource := rr.End()
+
 	time.Sleep(time.Second)
-	reqTotal, _ := common.RequestProtocolMetrics("redis_requests_total")
+	metrics, err := common.RequestProtocolMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqTotal := metrics["redis_requests_total"]
 	printTable(
 		"Redis",
 		c.conf.Total,
 		c.conf.Workers,
-		c.conf.Cmd,
 		c.conf.BodySize,
 		fmt.Sprintf("%.3fs", elapsed.Seconds()),
 		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
-		reqTotal,
+		c.conf.Cmd,
+		int(reqTotal),
 		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f", resource.CPU),
+		fmt.Sprintf("%.3f", resource.Mem/1024/1024),
 	)
-	_ = common.RequestReset()
 }
 
 func (c *Client) cmdPing() error {
@@ -142,16 +153,18 @@ func (c *Client) cmdGet() error {
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"Proto",
-		"Request",
-		"Workers",
-		"Command",
-		"BodySize",
-		"Elapsed",
-		"QPS",
+		"proto",
+		"request",
+		"workers",
+		"bodySize",
+		"elapsed",
+		"qps",
 		"bps",
-		"Proto/Metrics",
-		"Proto/Percent",
+		"command",
+		"proto/request",
+		"proto/percent",
+		"cpu (core)",
+		"memory (MB)",
 	}
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
@@ -168,7 +181,7 @@ func main() {
 	flag.IntVar(&c.Total, "total", 1, "requests total")
 	flag.StringVar(&c.BodySize, "body_size", "1KB", "request body size")
 	flag.StringVar(&c.Cmd, "cmd", "ping", "redis command, options: ping/set/get")
-	flag.DurationVar(&c.Interval, "interval", 0, "interval between requests")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval per request")
 	flag.Parse()
 
 	client := New(c)

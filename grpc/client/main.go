@@ -81,11 +81,19 @@ func (c *Client) Run() {
 	ch := make(chan struct{}, 1)
 	go func() {
 		for i := 0; i < c.conf.Total; i++ {
-			log.Printf("[%d/%d] request hello server, size=%s\n", i+1, c.conf.Total, c.conf.BodySize)
+			if c.conf.Interval > 0 {
+				time.Sleep(c.conf.Interval)
+			}
+			if common.ShouldLog(c.conf.Total, i) {
+				log.Printf("[%d/%d] request hello server, size=%s\n", i+1, c.conf.Total, c.conf.BodySize)
+			}
 			ch <- struct{}{}
 		}
 		close(ch)
 	}()
+
+	rr := common.NewResourceRecorder()
+	rr.Start()
 
 	var wg sync.WaitGroup
 	for i := 0; i < c.conf.Workers; i++ {
@@ -99,34 +107,44 @@ func (c *Client) Run() {
 	}
 	wg.Wait()
 
-	time.Sleep(time.Second)
-	reqTotal, _ := common.RequestProtocolMetrics("grpc_requests_total")
 	elapsed := time.Since(start)
+	resource := rr.End()
+
+	time.Sleep(time.Second)
+	metrics, err := common.RequestProtocolMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqTotal := metrics["grpc_requests_total"]
 	printTable(
-		"Grpc",
+		"gRPC",
 		c.conf.Total,
 		c.conf.Workers,
 		c.conf.BodySize,
 		fmt.Sprintf("%.3fs", elapsed.Seconds()),
 		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
 		common.HumanizeBit(float64(c.conf.Total*(c.conf.GetBodySize()))/elapsed.Seconds()),
-		reqTotal,
+		int(reqTotal),
 		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f", resource.CPU),
+		fmt.Sprintf("%.3f", resource.Mem/1024/1024),
 	)
-	_ = common.RequestReset()
 }
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"Proto",
-		"Request",
-		"Workers",
-		"BodySize",
-		"Elapsed",
-		"QPS",
+		"proto",
+		"request",
+		"workers",
+		"bodySize",
+		"elapsed",
+		"qps",
 		"bps",
-		"Proto/Metrics",
-		"Proto/Percent",
+		"proto/request",
+		"proto/percent",
+		"cpu (core)",
+		"memory (MB)",
 	}
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
