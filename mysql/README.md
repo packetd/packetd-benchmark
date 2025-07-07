@@ -1,3 +1,26 @@
+# MySQL 压测
+
+## 前置准备
+
+1）建表语句
+
+```sql
+CREATE TABLE `stress_test` (
+	`id` bigint UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '自增主键',
+	`uuid` char(36) NOT NULL DEFAULT '' COMMENT 'UUID',
+	`user_id` int UNSIGNED NOT NULL DEFAULT '0' COMMENT 'USER ID',
+	`amount` decimal(10, 2) NOT NULL DEFAULT '0.00' COMMENT '金额',
+	`create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+	`status` tinyint NOT NULL DEFAULT '0' COMMENT '状态',
+	PRIMARY KEY (`id`),
+	KEY `idx_user_id` (`user_id`),
+	KEY `idx_create_time` (`create_time`),
+	KEY `idx_status` (`status`)
+) ENGINE = InnoDB CHARSET = utf8mb4 COMMENT '压测表';
+```
+
+2）创建记录
+
 ```python
 import pymysql
 from faker import Faker
@@ -8,7 +31,6 @@ fake = Faker()
 conn = pymysql.connect(host='localhost', user='root', password='', db='benchmark')
 
 with conn.cursor() as cursor:
-    # 生成 100 万条数据
     for i in range(10000):
         user_id = random.randint(1, 100000)
         amount = round(random.uniform(0.01, 9999.99), 2)
@@ -26,4 +48,21 @@ with conn.cursor() as cursor:
 
 conn.commit()
 conn.close()
+```
+
+## 工具用法
+
+```shell
+$ ./client -h                                                             
+Usage of ./client:
+  -dsn string
+        mysql server dsn
+  -interval duration
+        interval per request
+  -sql string
+        sql statement
+  -total int
+        requests total (default 1)
+  -workers int
+        concurrency workers (default 1)
 ```

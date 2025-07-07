@@ -1,26 +1,18 @@
 GO ?= go
 SHELL = bash
-PKG = github.com/packetd/packetd
-
-VERSION := $(shell cat VERSION)
 
 .PHONY: help
 help:
 	@echo "Make Targets: "
 	@echo " mod: Download and tidy dependencies"
 	@echo " lint: Lint Go code"
-	@echo " test: Run unit tests"
-	@echo " build: Build Go package"
 	@echo " tools: Install dev tools"
-
-.PHONY: license
-license:
-	find ./ -type f \( -iname \*.go -o -iname \*.sh \) | xargs addlicense -v -f LICENSE
 
 .PHONY: lint
 lint: license
 	gofumpt -w .
 	goimports-reviser -project-name "github.com/packetd/packetd-benchmark" ./...
+	find ./ -type f \( -iname \*.go -o -iname \*.sh \) | xargs addlicense -v -f LICENSE
 
 .PHONY: mod
 mod:
