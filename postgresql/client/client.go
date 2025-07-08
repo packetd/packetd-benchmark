@@ -24,6 +24,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jedib0t/go-pretty/v6/table"
+
+	"github.com/packetd/packetd-benchmark/common"
 )
 
 type Config struct {
@@ -46,9 +49,7 @@ func New(conf Config) *Client {
 		os.Exit(1)
 	}
 
-	config.MinIdleConns = 10
-	config.MaxConns = 50
-
+	config.MaxConns = int32(conf.Workers)
 	conn, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		log.Fatal(err)
@@ -74,7 +75,9 @@ func (c *Client) Run() {
 			if c.conf.Interval > 0 {
 				time.Sleep(c.conf.Interval)
 			}
-			log.Printf("[%d/%d] sql (%s)\n", counter, c.conf.Total, c.conf.SQL)
+			if common.ShouldLog(c.conf.Total, i) {
+				log.Printf("[%d/%d] sql (%s)\n", counter, c.conf.Total, c.conf.SQL)
+			}
 			ch <- struct{}{}
 		}
 		close(ch)
@@ -82,6 +85,9 @@ func (c *Client) Run() {
 
 	start := time.Now()
 	wg := sync.WaitGroup{}
+
+	rr := common.NewResourceRecorder()
+	rr.Start()
 
 	var rows atomic.Int64
 	for i := 0; i < c.conf.Workers; i++ {
@@ -100,14 +106,49 @@ func (c *Client) Run() {
 		}()
 	}
 	wg.Wait()
-
 	elapsed := time.Since(start)
-	log.Printf("Total %d requests take %s, qps=%f, rows=%d\n",
+	resource := rr.End()
+
+	time.Sleep(time.Second)
+	metrics, err := common.RequestProtocolMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqTotal := metrics["postgresql_requests_total"]
+	printTable(
+		"PostgreSQL",
 		c.conf.Total,
-		elapsed,
-		float64(c.conf.Total)/elapsed.Seconds(),
-		rows.Load(),
+		c.conf.Workers,
+		fmt.Sprintf("%.3fs", elapsed.Seconds()),
+		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
+		c.conf.SQL,
+		int(reqTotal),
+		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f", resource.CPU),
+		fmt.Sprintf("%.3f", resource.Mem/1024/1024),
 	)
+}
+
+func printTable(columns ...interface{}) {
+	header := []interface{}{
+		"proto",
+		"request",
+		"workers",
+		"elapsed",
+		"qps",
+		"sql",
+		"proto/request",
+		"proto/percent",
+		"cpu (core)",
+		"memory (MB)",
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(header)
+	t.AppendRow(columns)
+	t.AppendSeparator()
+	t.Render()
 }
 
 func main() {
@@ -116,7 +157,7 @@ func main() {
 	flag.IntVar(&c.Workers, "workers", 1, "concurrency workers")
 	flag.IntVar(&c.Total, "total", 1, "requests total")
 	flag.StringVar(&c.SQL, "sql", "", "sql statement")
-	flag.DurationVar(&c.Interval, "interval", time.Second, "interval between requests")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval per request")
 	flag.Parse()
 
 	client := New(c)

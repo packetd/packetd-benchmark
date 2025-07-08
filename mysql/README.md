@@ -65,4 +65,6 @@ Usage of ./client:
         requests total (default 1)
   -workers int
         concurrency workers (default 1)
+        
+# ./client -dsn 'root@tcp(localhost:3306)/benchmark?charset=utf8mb4' -sql 'select * from stress_test limit 10000' -total 2000 -workers 30
 ```
