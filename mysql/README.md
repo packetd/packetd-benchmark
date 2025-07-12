@@ -1,6 +1,6 @@
 # MySQL 压测
 
-## 前置准备
+## Prepare for data
 
 1）建表语句
 
@@ -50,7 +50,7 @@ conn.commit()
 conn.close()
 ```
 
-## 工具用法
+## Usage
 
 ```shell
 $ ./client -h                                                             

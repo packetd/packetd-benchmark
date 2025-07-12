@@ -1,6 +1,6 @@
-package postgresql# MySQL 压测
+# PostgreSQL 压测
 
-## 前置准备
+## Prepare for data
 
 1）建表语句
 
@@ -36,10 +36,9 @@ current_timestamp - (random() * interval '365 days')
 FROM generate_series(1, 10000); 
 
 COMMIT;
-
 ```
 
-## 工具用法
+## Usage
 
 ```shell
 $ ./client -h

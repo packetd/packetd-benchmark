@@ -1,3 +1,9 @@
+# MongoDB 压测
+
+## Prepare for data
+
+1）建表语句
+
 ```sql
 use benchmark;
 
@@ -7,7 +13,6 @@ var randomValue = Math.random() * 1000;
 var isActive = i % 2 === 0;
 var tags = ["tag" + (i % 5 + 1), "tag" + (i % 3 + 1)];
 if (i % 7 === 0) tags.push("special");
-
     db.stress_test.insertOne({
         user_id: i,
         username: "user_" + i,
@@ -32,5 +37,25 @@ var endTime = new Date();
 print("Inserted 10000 records in " + (endTime - startTime) + " ms");
 ```
 
+## Usage
 
-./client -dsn 'mongodb://admin:admin@localhost:27017' -database benchmark -collection stress_test -workers 20 -limit 1000 -total 50000
+```shell
+$ ./client -h  
+Usage of ./client:
+  -collection string
+        collection name
+  -database string
+        database name
+  -dsn string
+        mysql server dsn
+  -interval duration
+        interval per request
+  -limit int
+        records count
+  -total int
+        requests total (default 1)
+  -workers int
+        concurrency workers (default 1)
+        
+# ./client -dsn 'mongodb://admin:admin@localhost:27017' -database benchmark -collection stress_test -workers 20 -limit 1000 -total 50000
+```

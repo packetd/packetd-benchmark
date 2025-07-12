@@ -21,5 +21,9 @@ grpc/client/client
 grpc/server/server
 mangodb/client/client
 postgresql/client/client
+kafka/consumer/consumer
+kafka/producer/producer
+amqp/consumer/consumer
+amqp/producer/producer
 
 dev.sh
