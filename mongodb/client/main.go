@@ -16,13 +16,18 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/packetd/packetd-benchmark/common"
 )
 
 type Config struct {
@@ -31,6 +36,7 @@ type Config struct {
 	Total      int
 	Database   string
 	Collection string
+	Limit      int64
 	Interval   time.Duration
 }
 
@@ -72,7 +78,9 @@ func (c *Client) Run() {
 			if c.conf.Interval > 0 {
 				time.Sleep(c.conf.Interval)
 			}
-			log.Printf("[%d/%d] collection (%s.%s)\n", counter, c.conf.Total, c.conf.Database, c.conf.Collection)
+			if common.ShouldLog(c.conf.Total, i) {
+				log.Printf("[%d/%d] collection (%s.%s)\n", counter, c.conf.Total, c.conf.Database, c.conf.Collection)
+			}
 			ch <- struct{}{}
 		}
 		close(ch)
@@ -81,13 +89,18 @@ func (c *Client) Run() {
 	start := time.Now()
 	wg := sync.WaitGroup{}
 
+	rr := common.NewResourceRecorder()
+	rr.Start()
+
 	collection := c.cli.Database(c.conf.Database).Collection(c.conf.Collection)
 	for i := 0; i < c.conf.Workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for range ch {
-				r, err := collection.Find(c.ctx, bson.D{})
+				opt := options.Find()
+				opt.Limit = &c.conf.Limit
+				r, err := collection.Find(c.ctx, bson.D{}, opt)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -98,13 +111,49 @@ func (c *Client) Run() {
 		}()
 	}
 	wg.Wait()
-
 	elapsed := time.Since(start)
-	log.Printf("Total %d requests take %s, qps=%f\n",
+	resource := rr.End()
+
+	time.Sleep(time.Second)
+	metrics, err := common.RequestProtocolMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reqTotal := metrics["mongodb_requests_total"]
+	printTable(
+		"MongoDB",
 		c.conf.Total,
-		elapsed,
-		float64(c.conf.Total)/elapsed.Seconds(),
+		c.conf.Workers,
+		fmt.Sprintf("%.3fs", elapsed.Seconds()),
+		fmt.Sprintf("%.3f", float64(c.conf.Total)/elapsed.Seconds()),
+		c.conf.Limit,
+		int(reqTotal),
+		fmt.Sprintf("%.3f%%", reqTotal/float64(c.conf.Total)*100),
+		fmt.Sprintf("%.3f", resource.CPU),
+		fmt.Sprintf("%.3f", resource.Mem/1024/1024),
 	)
+}
+
+func printTable(columns ...interface{}) {
+	header := []interface{}{
+		"proto",
+		"request",
+		"workers",
+		"elapsed",
+		"qps",
+		"limit",
+		"proto/request",
+		"proto/percent",
+		"cpu (core)",
+		"memory (MB)",
+	}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(header)
+	t.AppendRow(columns)
+	t.AppendSeparator()
+	t.Render()
 }
 
 func main() {
@@ -114,7 +163,8 @@ func main() {
 	flag.IntVar(&c.Total, "total", 1, "requests total")
 	flag.StringVar(&c.Database, "database", "", "database name")
 	flag.StringVar(&c.Collection, "collection", "", "collection name")
-	flag.DurationVar(&c.Interval, "interval", time.Second, "interval between requests")
+	flag.DurationVar(&c.Interval, "interval", 0, "interval per request")
+	flag.Int64Var(&c.Limit, "limit", 0, "records count")
 	flag.Parse()
 
 	client := New(c)
