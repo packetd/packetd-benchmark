@@ -118,7 +118,6 @@ func (c *Client) Run() {
 
 	reqTotal := metrics["grpc_requests_total"]
 	printTable(
-		"gRPC",
 		c.conf.Total,
 		c.conf.Workers,
 		c.conf.BodySize,
@@ -134,15 +133,14 @@ func (c *Client) Run() {
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"proto",
 		"request",
 		"workers",
 		"bodySize",
 		"elapsed",
 		"qps",
 		"bps",
-		"proto/request",
-		"proto/percent",
+		"proto (request)",
+		"proto (percent)",
 		"cpu (core)",
 		"memory (MB)",
 	}

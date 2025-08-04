@@ -109,7 +109,6 @@ func (c *Client) Run() {
 
 	reqTotal := metrics["mysql_requests_total"]
 	printTable(
-		"MySQL",
 		c.conf.Total,
 		c.conf.Workers,
 		fmt.Sprintf("%.3fs", elapsed.Seconds()),
@@ -124,14 +123,13 @@ func (c *Client) Run() {
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"proto",
 		"request",
 		"workers",
 		"elapsed",
 		"qps",
 		"sql",
-		"proto/request",
-		"proto/percent",
+		"proto (request)",
+		"proto (percent)",
 		"cpu (core)",
 		"memory (MB)",
 	}

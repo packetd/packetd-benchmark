@@ -124,7 +124,6 @@ func (c *Client) Run() {
 
 	reqTotal := metrics["redis_requests_total"]
 	printTable(
-		"Redis",
 		c.conf.Total,
 		c.conf.Workers,
 		c.conf.BodySize,
@@ -153,7 +152,6 @@ func (c *Client) cmdGet() error {
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"proto",
 		"request",
 		"workers",
 		"bodySize",
@@ -161,8 +159,8 @@ func printTable(columns ...interface{}) {
 		"qps",
 		"bps",
 		"command",
-		"proto/request",
-		"proto/percent",
+		"proto (request)",
+		"proto (percent)",
 		"cpu (core)",
 		"memory (MB)",
 	}

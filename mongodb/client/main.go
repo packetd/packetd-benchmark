@@ -122,7 +122,6 @@ func (c *Client) Run() {
 
 	reqTotal := metrics["mongodb_requests_total"]
 	printTable(
-		"MongoDB",
 		c.conf.Total,
 		c.conf.Workers,
 		fmt.Sprintf("%.3fs", elapsed.Seconds()),
@@ -137,14 +136,13 @@ func (c *Client) Run() {
 
 func printTable(columns ...interface{}) {
 	header := []interface{}{
-		"proto",
 		"request",
 		"workers",
 		"elapsed",
 		"qps",
 		"limit",
-		"proto/request",
-		"proto/percent",
+		"proto (request)",
+		"proto (percent)",
 		"cpu (core)",
 		"memory (MB)",
 	}
